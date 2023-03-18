@@ -7,7 +7,7 @@ fn main() {
 
     //main simulation loop
     loop {
-        match next_event(&mut queue).body {
+        match queue.next_event().body {
             EventBody::End => break,
             _ => ()
         }
