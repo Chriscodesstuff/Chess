@@ -49,33 +49,35 @@ pub struct EventQueue {
     future: BinaryHeap<Event>
 }
 
-pub fn next_event(queue: &mut EventQueue) -> Event{
-    if queue.active.is_empty() {
-        activate_inactive_events(queue)
-    }
-    return queue.active.pop().unwrap()
-}
-
-fn activate_inactive_events(queue: &mut EventQueue) {
-    if queue.inactive.is_empty() {
-        advance_time(queue);
-    } else {
-        queue.active.append(&mut queue.inactive);
-    }
-}
-
-fn advance_time(queue: &mut EventQueue) {
-    if let Some(event) = queue.future.peek() {
-        let time = event.time;
-        while !queue.future.is_empty() {
-            if (queue.future.peek().unwrap().time > time) { break; }
-            queue.active.push(queue.future.pop().unwrap())
+impl EventQueue {
+    pub fn next_event(&mut self) -> Event{
+        if self.active.is_empty() {
+            self.activate_inactive_events();
         }
-    } else {
-        queue.active.push(Event {
-            time: 0,
-            body: EventBody::End
-        });
+        return self.active.pop().unwrap()
+    }
+
+    fn activate_inactive_events(&mut self) {
+        if self.inactive.is_empty() {
+            self.advance_time();
+        } else {
+            self.active.append(&mut self.inactive);
+        }
+    }
+
+    fn advance_time(&mut self) {
+        if let Some(event) = self.future.peek() {
+            let time = event.time;
+            while !self.future.is_empty() {
+                if self.future.peek().unwrap().time > time { break; }
+                self.active.push(self.future.pop().unwrap())
+            }
+        } else {
+            self.active.push(Event {
+                time: 0,
+                body: EventBody::End
+            });
+        }
     }
 }
 
@@ -132,7 +134,7 @@ mod tests {
         queue.future.push(Event::new(1, EventBody::Test(2)));
         queue.future.push(Event::new(2, EventBody::Test(3)));
 
-        advance_time(&mut queue);
+        queue.advance_time();
 
         assert_eq!(queue.active.len(), 2, "<-- active contains 2 events");
         assert_eq!(queue.inactive.len(), 0, "<-- inactive contains 0 events");
@@ -147,7 +149,7 @@ mod tests {
     fn advance_time_test_end() {
         let mut queue: EventQueue = Default::default();
 
-        advance_time(&mut queue);
+        queue.advance_time();
 
         assert!(vector_has_event_end(&queue.active));
     }
@@ -160,7 +162,7 @@ mod tests {
         queue.inactive.push(Event::new(1, EventBody::Test(2)));
         queue.future.push(Event::new(2, EventBody::Test(3)));
 
-        activate_inactive_events(&mut queue);
+        queue.activate_inactive_events();
 
         assert_eq!(queue.active.len(), 2, "<-- active contains 2 events");
         assert_eq!(queue.inactive.len(), 0, "<-- inactive contains 0 events");
@@ -179,7 +181,7 @@ mod tests {
         queue.future.push(Event::new(1, EventBody::Test(2)));
         queue.future.push(Event::new(2, EventBody::Test(3)));
 
-        activate_inactive_events(&mut queue);
+        queue.activate_inactive_events();
 
         assert_eq!(queue.active.len(), 2, "<-- active contains 2 events");
         assert_eq!(queue.inactive.len(), 0, "<-- inactive contains 0 events");
@@ -194,7 +196,7 @@ mod tests {
     fn activate_inactive_events_test_advance_end() {
         let mut queue: EventQueue = Default::default();
 
-        activate_inactive_events(&mut queue);
+        queue.activate_inactive_events();
 
         assert_eq!(queue.active.len(), 1, "<-- active contains 2 events");
         assert_eq!(queue.inactive.len(), 0, "<-- inactive contains 0 events");
@@ -211,7 +213,7 @@ mod tests {
         queue.active.push(Event::new(1, EventBody::Test(2)));
         queue.active.push(Event::new(1, EventBody::Test(3)));
 
-        let event = next_event(&mut queue);
+        let event = queue.next_event();
 
         assert!(event_has_testid_in(&event, vec![1, 2, 3]));
     }
@@ -224,7 +226,7 @@ mod tests {
         queue.inactive.push(Event::new(1, EventBody::Test(2)));
         queue.inactive.push(Event::new(1, EventBody::Test(3)));
 
-        let event = next_event(&mut queue);
+        let event = queue.next_event();
 
         assert!(event_has_testid_in(&event, vec![1, 2, 3]));
     }
@@ -233,7 +235,7 @@ mod tests {
     fn next_event_test_advance_time() {
         let mut queue: EventQueue = Default::default();
 
-        let event = next_event(&mut queue);
+        let event = queue.next_event();
 
         assert!(event_is_end(&event));
     }
