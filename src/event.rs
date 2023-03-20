@@ -2,8 +2,6 @@ use std::cmp::Ordering;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Event {
-    Update(String),
-    Evaluate(i32),
     End,
     Test(i32),
 }
