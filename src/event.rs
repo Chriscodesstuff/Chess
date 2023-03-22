@@ -1,8 +1,10 @@
 use std::cmp::Ordering;
 
 #[derive(PartialEq, Eq, Debug)]
+#[allow(dead_code)]
 pub enum Event {
-    End,
+    Foo,
+    Bar,
     Test(i32),
 }
 
