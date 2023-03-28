@@ -7,38 +7,40 @@ pub enum Value {
 }
 
 pub struct Process {
-    inputs: Vec<usize>,
-    output: Value
+    inputs: Vec<Option<usize>>,
+    output: Option<usize>,
+    output_value: Value 
 }
 
 impl Process {
     fn with_output(value: Value) -> Self {
         Process {
             inputs: vec![],
-            output: value
+            output: None,
+            output_value: value
         }
     }
 
     fn new() -> Self {
         Process::with_output(Value::HIGHIMP)
-    }
+    } 
 }
 
 pub struct Net {
-    driver: Option<usize>
+    driver: Option<usize>,
+    sensitive_processes: Vec<usize>
 }
 
 impl Net {
-    fn from_index(driver: usize) -> Self {
+    fn new() -> Self {
         Net {
-            driver: Some(driver)
+            driver: None,
+            sensitive_processes: vec![]
         }
     }
 
-    fn new() -> Self {
-        Net {
-            driver: None
-        }
+    fn add_sensitive_process(&mut self, proc_index: usize) {
+        self.sensitive_processes.push(proc_index);
     }
 }
 
@@ -55,85 +57,98 @@ impl State {
         }
     }
 
-    pub fn set_process_output(&mut self, index: usize, value: Value) {
-        if let Some(process) = self.processes.get_mut(index) {
-            process.output = value;
+    pub fn add_process(&mut self) -> usize {
+        self.processes.push(Process::new());
+        self.processes.len() - 1
+    }
+    
+    pub fn add_net(&mut self) -> usize {
+        self.nets.push(Net::new());
+        self.nets.len() - 1
+    }
+    
+    pub fn set_process_inputs(&mut self, process_index: usize, input_nets: Vec<usize>) {
+        if let Some(process) = self.processes.get_mut(process_index) {  //Get process
+            process.inputs = input_nets.iter().map(|net_index| {        //Get each input net index                                                                            
+                if let Some(net) = self.nets.get_mut(*net_index) {      //Get net at index
+                    net.add_sensitive_process(process_index);           //reg. process in net
+                }
+                Some(*net_index)
+            }).collect();                                               //collect for input processes
         }
     }
 
-    fn find_net_driver_value(&self, index: usize) -> Value {
-        if let Some(net) = self.nets.get(index) {
-            if let Some(driver) = net.driver {
-                if let Some(value) = self.get_procedure_output(driver) {
-                    return value;
-                }
-            }
+    pub fn set_process_output(&mut self, process_index: usize, output_net: usize) {
+        if let Some(process) = self.processes.get_mut(process_index) {
+            process.output = Some(output_net);
         }
-        Value::HIGHIMP
+        if let Some(net) = self.nets.get_mut(output_net) {
+            net.driver = Some(process_index);
+        }
     }
- 
-    fn get_procedure_output(&self, index: usize) -> Option<Value> {
-        if let Some(process) = self.processes.get(index) {
-            return Some(process.output);
-        }
-        None
+    
+    pub fn set_process_output_value(&mut self, process_index: usize, output_value: Value) {
+        self.processes[process_index].output_value = output_value;
+    }
+    
+    pub fn get_process_input_values(&self, process_index: usize) -> Vec<Value> {
+        self.processes[process_index].inputs.iter().map(|net_index| {
+            if let Some(index) = net_index {
+                if let Some(driver_index) = self.nets[*index].driver {
+                    return self.processes[driver_index].output_value;
+                }
+            } 
+            Value::HIGHIMP
+        }).collect() 
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-
+    
     #[test]
-    fn find_net_driver_value_some() {
+    fn state_test() {
         let mut state = State::new();
+       
+        let net_a = state.add_net();
+        let net_b = state.add_net();
+        let net_c = state.add_net();
 
-        state.processes.push(Process::with_output(Value::ONE));
-        state.processes.push(Process::with_output(Value::ZERO));
-        state.processes.push(Process::with_output(Value::UNKNOWN));
+        let process_a = state.add_process();
+        let process_b = state.add_process();
+        let process_c = state.add_process();
+        let process_d = state.add_process();
 
-        state.nets.push(Net::from_index(0));
-        state.nets.push(Net::from_index(1));
-        state.nets.push(Net::from_index(2));
+        state.set_process_inputs(process_a, vec![net_c, net_b, net_a]);
+        state.set_process_output(process_b, net_a);
+        state.set_process_output(process_c, net_b);
+        state.set_process_output(process_d, net_c);
+        state.set_process_output_value(process_b, Value::ONE);
+        state.set_process_output_value(process_c, Value::ZERO);
+        state.set_process_output_value(process_d, Value::UNKNOWN);
+        
+        assert_eq!(state.processes[process_a].inputs.len(), 3);
+        assert_eq!(state.processes[process_a].inputs[0], Some(net_c));
+        assert_eq!(state.processes[process_a].inputs[1], Some(net_b));
+        assert_eq!(state.processes[process_a].inputs[2], Some(net_a));
+        assert_eq!(state.nets[net_a].sensitive_processes.len(), 1);
+        assert_eq!(state.nets[net_b].sensitive_processes.len(), 1);
+        assert_eq!(state.nets[net_c].sensitive_processes.len(), 1);
+        assert_eq!(state.nets[net_a].sensitive_processes[0], process_a);
+        assert_eq!(state.nets[net_b].sensitive_processes[0], process_a);
+        assert_eq!(state.nets[net_c].sensitive_processes[0], process_a);
 
-        assert_eq!(state.find_net_driver_value(0), Value::ONE);
-        assert_eq!(state.find_net_driver_value(1), Value::ZERO);
-        assert_eq!(state.find_net_driver_value(2), Value::UNKNOWN);
-    }
+        assert_eq!(state.processes[process_b].output, Some(net_a));
+        assert_eq!(state.processes[process_c].output, Some(net_b));
+        assert_eq!(state.processes[process_d].output, Some(net_c));
+        assert_eq!(state.nets[net_a].driver, Some(process_b));
+        assert_eq!(state.nets[net_b].driver, Some(process_c));
+        assert_eq!(state.nets[net_c].driver, Some(process_d));
 
-    #[test]
-    fn find_net_driver_value_no_driver() {
-        let mut state = State::new();
-
-        state.processes.push(Process::new());
-        state.nets.push(Net::new());
-
-        assert_eq!(state.find_net_driver_value(0), Value::HIGHIMP);
-    }
-
-    #[test]
-    fn find_net_driver_value_process_dne() {
-        let mut state = State::new();
-
-        state.nets.push(Net::from_index(0));
-
-        assert_eq!(state.find_net_driver_value(0), Value::HIGHIMP);
-    }
-
-
-    #[test]
-    fn find_net_driver_value_net_dne() {
-        let state = State::new();
-
-        assert_eq!(state.find_net_driver_value(0), Value::HIGHIMP);
-    }
-
-    #[test]
-    fn set_process_output_some() {
-        let mut state = State::new();
-        state.processes.push(Process::new());
-        state.set_process_output(0, Value::ONE);
-
-        assert_eq!(state.processes[0].output, Value::ONE);
+        assert_eq!(state.processes[process_b].output_value, Value::ONE);
+        assert_eq!(state.processes[process_c].output_value, Value::ZERO);
+        assert_eq!(state.processes[process_d].output_value, Value::UNKNOWN);
+        assert_eq!(state.get_process_input_values(process_a), vec![Value::UNKNOWN, Value::ZERO, Value::ONE]);
     }
 }
